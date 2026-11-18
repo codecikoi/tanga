@@ -16,9 +16,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "5A0000000000000000000010"
-               BuildableName = "Sarrof.app"
-               BlueprintName = "Sarrof"
-               ReferencedContainer = "container:Sarrof.xcodeproj">
+               BuildableName = "Tanga.app"
+               BlueprintName = "Tanga"
+               ReferencedContainer = "container:Tanga.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -36,9 +36,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "5A0000000000000000000011"
-               BuildableName = "SarrofTests.xctest"
-               BlueprintName = "SarrofTests"
-               ReferencedContainer = "container:Sarrof.xcodeproj">
+               BuildableName = "TangaTests.xctest"
+               BlueprintName = "TangaTests"
+               ReferencedContainer = "container:Tanga.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -58,9 +58,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "5A0000000000000000000010"
-            BuildableName = "Sarrof.app"
-            BlueprintName = "Sarrof"
-            ReferencedContainer = "container:Sarrof.xcodeproj">
+            BuildableName = "Tanga.app"
+            BlueprintName = "Tanga"
+            ReferencedContainer = "container:Tanga.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -75,9 +75,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "5A0000000000000000000010"
-            BuildableName = "Sarrof.app"
-            BlueprintName = "Sarrof"
-            ReferencedContainer = "container:Sarrof.xcodeproj">
+            BuildableName = "Tanga.app"
+            BlueprintName = "Tanga"
+            ReferencedContainer = "container:Tanga.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

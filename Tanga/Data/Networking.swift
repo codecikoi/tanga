@@ -90,11 +90,6 @@ final class FileStore {
         if let data = try? JSONEncoder().encode(value) { write(data, name) }
     }
 
-    func removeAll() {
-        try? FileManager.default.removeItem(at: directory)
-        createDirectory()
-    }
-
     private func createDirectory() {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }

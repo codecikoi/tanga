@@ -4,7 +4,7 @@ struct SettingsView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(ConverterStore.self) private var store
     @Environment(\.dismiss) private var dismiss
-    @State private var cacheCleared = false
+    @State private var choosingMain = false
 
     var body: some View {
         @Bindable var settings = settings
@@ -17,8 +17,8 @@ struct SettingsView: View {
                             .frame(width: 60, height: 60)
                             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("Sarrof").font(.title3.weight(.semibold))
-                            Text("«Меняла» по-узбекски. Валюты мира, криптовалюты и металлы.")
+                            Text("TANGA").font(.title3.weight(.semibold))
+                            Text("«Монета» по-узбекски. Валюты мира, криптовалюты и металлы.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
@@ -26,7 +26,28 @@ struct SettingsView: View {
                     .padding(.vertical, 4)
                 }
 
-                Section("Курсы") {
+                Section {
+                    Button { choosingMain = true } label: {
+                        HStack(spacing: 10) {
+                            Text("Основная валюта")
+                                .foregroundStyle(Theme.textPrimary)
+                            Spacer()
+                            CurrencyBadge(code: settings.mainCurrency, currency: store.currency(settings.mainCurrency),
+                                          width: 27, height: 19)
+                            Text(settings.mainCurrency)
+                                .foregroundStyle(.secondary)
+                            Image(systemName: "chevron.right")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                } footer: {
+                    Text("Мини-графики и проценты в строках показывают, сколько валюта стоит в основной. С ней же открывается график курса.")
+                }
+
+                Section {
                     Picker("Автообновление", selection: $settings.refreshInterval) {
                         ForEach(RefreshInterval.allCases) { Text($0.title).tag($0) }
                     }
@@ -41,6 +62,10 @@ struct SettingsView: View {
                             if store.isRefreshing { ProgressView() }
                         }
                     }
+                } header: {
+                    Text("Курсы")
+                } footer: {
+                    Text("Курсы справочные — в банке и обменнике они отличаются.")
                 }
 
                 Section("Отображение") {
@@ -54,29 +79,13 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    source("Coinbase", "Живые курсы фиата и крипты, раз в минуту", "https://www.coinbase.com")
-                    source("Currency API", "340 валют и металлы, дневная история для графиков",
-                           "https://github.com/fawazahmed0/exchange-api")
-                    source("flagcdn.com", "Флаги стран", "https://flagcdn.com")
-                    source("CoinCap", "Иконки криптовалют", "https://coincap.io")
-                } header: {
-                    Text("Источники данных")
-                } footer: {
-                    Text("Все источники бесплатные и без ключей. Курсы справочные — в банке и обменнике они отличаются.")
-                }
-
-                Section {
-                    Button(cacheCleared ? "Кэш очищен" : "Очистить кэш графиков и иконок", role: .destructive) {
-                        store.history.clearCache()
-                        ImageLoader.shared.clearCache()
-                        cacheCleared = true
-                    }
-                    .disabled(cacheCleared)
-                }
-
-                Section {
                     LabeledContent("Версия", value: version)
                 }
+            }
+            .sheet(isPresented: $choosingMain) {
+                CurrencyPickerView(mode: .choose(title: "Основная валюта", selected: settings.mainCurrency) {
+                    settings.mainCurrency = $0
+                })
             }
             .navigationTitle("Настройки")
             .navigationBarTitleDisplayMode(.inline)
@@ -99,14 +108,5 @@ struct SettingsView: View {
         let short = info?["CFBundleShortVersionString"] as? String ?? "1.0"
         let build = info?["CFBundleVersion"] as? String ?? "1"
         return "\(short) (\(build))"
-    }
-
-    private func source(_ title: String, _ detail: String, _ link: String) -> some View {
-        Link(destination: URL(string: link)!) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).foregroundStyle(.primary)
-                Text(detail).font(.footnote).foregroundStyle(.secondary)
-            }
-        }
     }
 }

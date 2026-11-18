@@ -1,18 +1,20 @@
 import SwiftUI
 import UIKit
 
-/// Палитра «Самарканд»: бирюза изразцов, лазурит и золото.
+/// Палитра под иконку: оранжевый акцент #FF5A1F на нейтральном фоне.
 enum Theme {
     static let background = Color.dynamic(light: 0xF2F4F7, dark: 0x15161A)
     static let surface = Color.dynamic(light: 0xFFFFFF, dark: 0x1D1E23)
-    static let rowActive = Color.dynamic(light: 0xDDEFF3, dark: 0x1D2A33)
+    static let rowActive = Color.dynamic(light: 0xFFE9DE, dark: 0x2C211C)
     static let key = Color.dynamic(light: 0xF1F3F6, dark: 0x2A2B31)
     static let keyPressed = Color.dynamic(light: 0xDDE2E9, dark: 0x3A3B43)
     static let keyBorder = Color.dynamic(light: 0xE1E4EA, dark: 0x34353C)
+    /// Круглые кнопки в шапке.
+    static let chip = Color.dynamic(light: 0xFFFFFF, dark: 0x2A2B31)
     static let separator = Color.dynamic(light: 0xE2E5EA, dark: 0x2A2B31)
     static let textPrimary = Color.dynamic(light: 0x14161A, dark: 0xEEEFF1)
     static let textSecondary = Color.dynamic(light: 0x6B6F78, dark: 0x8E919A)
-    static let accent = Color.dynamic(light: 0x0E93A6, dark: 0x22C3D6)
+    static let accent = Color.dynamic(light: 0xF25418, dark: 0xFF6A2E)
     static let gold = Color.dynamic(light: 0xD08612, dark: 0xF2B441)
     static let danger = Color.dynamic(light: 0xD8392F, dark: 0xF0625B)
     static let positive = Color.dynamic(light: 0x1C9A57, dark: 0x3DD68C)

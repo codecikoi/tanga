@@ -43,8 +43,9 @@ enum AmountFormatter {
         return text
     }
 
-    static func rate(_ value: Double, locale: Locale = .current) -> String {
-        let digits = rateFractionDigits(value)
+    /// Курс. `reference` — число, под точность которого подстроиться (для разницы курсов).
+    static func rate(_ value: Double, like reference: Double? = nil, locale: Locale = .current) -> String {
+        let digits = rateFractionDigits(reference ?? value)
         return formatter(digits: digits, grouping: true, locale: locale)
             .string(from: NSNumber(value: normalized(value, digits: digits))) ?? "—"
     }

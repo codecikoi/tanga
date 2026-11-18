@@ -5,7 +5,7 @@ final class ImageLoader {
     static let shared = ImageLoader()
 
     private let memory = NSCache<NSString, UIImage>()
-    private let disk = FileStore(.cachesDirectory, folder: "Sarrof/icons")
+    private let disk = FileStore(.cachesDirectory, folder: "Tanga/icons")
     private let http = HTTPClient(timeout: 12)
     private var inflight: [String: Task<UIImage?, Never>] = [:]
     private var failed: Set<String> = []
@@ -40,11 +40,5 @@ final class ImageLoader {
             failed.insert(key)
         }
         return image
-    }
-
-    func clearCache() {
-        memory.removeAllObjects()
-        failed.removeAll()
-        disk.removeAll()
     }
 }

@@ -8,6 +8,10 @@ final class RateChartModel {
     var range: ChartRange = .month
     private(set) var points: [RatePoint] = []
     private(set) var isLoading = false
+    /// Пара и период, для которых загружены `points`. Пока грузится новый период, на экране
+    /// старые точки — их нельзя подписывать новым периодом («−0,25% за 2Г» на месячных данных).
+    private(set) var loadedKey = ""
+    private(set) var loadedRange: ChartRange = .month
 
     @ObservationIgnored private let history: HistoryRepository
 
@@ -19,12 +23,37 @@ final class RateChartModel {
 
     var taskKey: String { "\(base)-\(quote)-\(range.rawValue)" }
 
+    /// На экране точки другой пары или периода — новые ещё грузятся.
+    var isStale: Bool { loadedKey != taskKey }
+
+    enum Side: String, Identifiable {
+        case base, quote
+        var id: Self { self }
+    }
+
     func swap() {
         (base, quote) = (quote, base)
     }
 
+    func code(_ side: Side) -> String {
+        side == .base ? base : quote
+    }
+
+    /// Выбрали валюту, которая уже стоит с другой стороны, — стороны меняются местами.
+    func set(_ code: String, for side: Side) {
+        let other = side == .base ? quote : base
+        if code == other {
+            swap()
+        } else if side == .base {
+            base = code
+        } else {
+            quote = code
+        }
+    }
+
     /// Дневная история + текущий живой курс последней точкой.
     func load(live: Double?) async {
+        let (key, base, quote, range) = (taskKey, base, quote, range)
         isLoading = true
         var loaded = await history.series(base: base, quote: quote, range: range)
         guard !Task.isCancelled else { return }
@@ -33,6 +62,8 @@ final class RateChartModel {
             loaded.append(RatePoint(date: .now, value: live))
         }
         points = loaded
+        loadedKey = key
+        loadedRange = range
         isLoading = false
     }
 }
@@ -42,6 +73,7 @@ struct RateChartView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var model: RateChartModel
     @State private var selectedDate: Date?
+    @State private var choosing: RateChartModel.Side?
 
     init(base: String, quote: String, history: HistoryRepository) {
         _model = State(initialValue: RateChartModel(base: base, quote: quote, history: history))
@@ -78,6 +110,14 @@ struct RateChartView: View {
                 selectedDate = nil
                 await model.load(live: liveRate)
             }
+            .sheet(item: $choosing) { side in
+                CurrencyPickerView(mode: .choose(
+                    title: side == .base ? "Первая валюта" : "Вторая валюта",
+                    selected: model.code(side)
+                ) { code in
+                    withAnimation(.snappy) { model.set(code, for: side) }
+                })
+            }
         }
     }
 
@@ -89,14 +129,12 @@ struct RateChartView: View {
     // MARK: - Заголовки
 
     private var pairHeader: some View {
-        HStack(spacing: 10) {
-            CurrencyBadge(code: model.base, currency: store.currency(model.base))
-            Text(model.base).font(.title3.weight(.semibold))
+        HStack(spacing: 6) {
+            currencyButton(.base)
             Image(systemName: "arrow.right")
                 .font(.footnote.weight(.bold))
                 .foregroundStyle(Theme.textSecondary)
-            CurrencyBadge(code: model.quote, currency: store.currency(model.quote))
-            Text(model.quote).font(.title3.weight(.semibold))
+            currencyButton(.quote)
             Spacer()
             Button {
                 withAnimation(.snappy) { model.swap() }
@@ -110,8 +148,28 @@ struct RateChartView: View {
         .foregroundStyle(Theme.textPrimary)
     }
 
+    /// Флаг и код валюты; нажатие открывает выбор другой валюты для этой стороны.
+    private func currencyButton(_ side: RateChartModel.Side) -> some View {
+        let code = model.code(side)
+        return Button { choosing = side } label: {
+            HStack(spacing: 8) {
+                CurrencyBadge(code: code, currency: store.currency(code))
+                Text(code).font(.title3.weight(.semibold))
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Theme.textSecondary)
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 4)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(side == .base ? "Первая валюта \(code)" : "Вторая валюта \(code)")
+        .accessibilityHint("Выбрать другую валюту")
+    }
+
     private var valueHeader: some View {
-        let shown = selectedPoint ?? model.points.last
+        let shown = model.isStale ? nil : (selectedPoint ?? model.points.last)
         return VStack(alignment: .leading, spacing: 4) {
             Text("1 \(model.base) =")
                 .font(.subheadline)
@@ -137,20 +195,51 @@ struct RateChartView: View {
                 Text(changeText(change))
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(change.absolute >= 0 ? Theme.positive : Theme.danger)
+            } else {
+                // Строка есть всегда, иначе на время загрузки весь экран прыгает вверх.
+                Text(model.isLoading ? "Загружаем историю…" : " ")
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(Theme.textSecondary)
             }
         }
     }
 
     // MARK: - График
 
-    private var chart: some View {
+    /// Пока точек нет, оси не рисуем: пустой Chart показывает шкалу 0…1, и при первой загрузке
+    /// линия на мгновение ложится на неё.
+    @ViewBuilder private var chart: some View {
+        if model.points.count >= 2 {
+            chartBody
+                .opacity(model.isStale ? 0.35 : 1)
+                .allowsHitTesting(!model.isStale)
+                .overlay {
+                    if model.isStale { ProgressView() }
+                }
+                .animation(.easeInOut(duration: 0.2), value: model.isStale)
+        } else {
+            Group {
+                if model.isLoading {
+                    ProgressView()
+                } else {
+                    ContentUnavailableView("Нет истории", systemImage: "chart.line.downtrend.xyaxis",
+                                           description: Text("Для этой пары нет дневных архивов."))
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var chartBody: some View {
         let points = model.points
         let values = points.map(\.value)
         let low = values.min() ?? 0
         let high = values.max() ?? 1
         let padding = max((high - low) * 0.15, abs(high) * 0.002)
         let domain = (low - padding)...(high + padding)
-        let color = (change?.absolute ?? 0) >= 0 ? Theme.positive : Theme.danger
+        // Цвет по самим точкам, а не по `change`: пока грузится новый период, график не перекрашивается.
+        let rising = (points.last?.value ?? 0) >= (points.first?.value ?? 0)
+        let color = rising ? Theme.positive : Theme.danger
 
         return Chart {
             ForEach(points) { point in
@@ -196,19 +285,11 @@ struct RateChartView: View {
                 AxisValueLabel(format: axisFormat)
             }
         }
-        .overlay {
-            if model.isLoading && points.isEmpty {
-                ProgressView()
-            } else if !model.isLoading && points.count < 2 {
-                ContentUnavailableView("Нет истории", systemImage: "chart.line.downtrend.xyaxis",
-                                       description: Text("Для этой пары нет дневных архивов."))
-            }
-        }
         .animation(.easeInOut(duration: 0.25), value: points)
     }
 
     private var axisFormat: Date.FormatStyle {
-        switch model.range {
+        switch model.loadedRange {
         case .week, .month: .dateTime.day().month(.abbreviated)
         case .quarter, .year: .dateTime.month(.abbreviated)
         case .twoYears: .dateTime.month(.abbreviated).year(.twoDigits)
@@ -225,7 +306,8 @@ struct RateChartView: View {
     // MARK: - Сводка
 
     private var change: (absolute: Double, percent: Double)? {
-        guard let first = model.points.first?.value, let last = model.points.last?.value, first > 0,
+        guard !model.isStale,
+              let first = model.points.first?.value, let last = model.points.last?.value, first > 0,
               model.points.count > 1
         else { return nil }
         return (last - first, (last - first) / first * 100)
@@ -234,11 +316,14 @@ struct RateChartView: View {
     private func changeText(_ change: (absolute: Double, percent: Double)) -> String {
         let sign = change.absolute >= 0 ? "+" : "−"
         let percent = abs(change.percent).formatted(.number.precision(.fractionLength(2)))
-        return "\(sign)\(AmountFormatter.rate(abs(change.absolute))) (\(sign)\(percent)%) за \(model.range.title)"
+        // Точность как у самого курса: «−70,82» к курсу 12 014,07, а не «−70,8185».
+        let reference = model.points.last?.value ?? change.absolute
+        let absolute = AmountFormatter.rate(abs(change.absolute), like: reference)
+        return "\(sign)\(absolute) (\(sign)\(percent)%) за \(model.loadedRange.title)"
     }
 
     private var stats: some View {
-        let values = model.points.map(\.value)
+        let values = model.isStale ? [] : model.points.map(\.value)
         return HStack(spacing: 10) {
             statCard("Минимум", values.min())
             statCard("Максимум", values.max())

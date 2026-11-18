@@ -2,11 +2,13 @@ import SwiftUI
 
 /// Выбор валюты: все валюты мира, криптовалюты и драгметаллы с поиском.
 struct CurrencyPickerView: View {
-    enum Mode: Equatable {
+    enum Mode {
         /// Добавление в список — можно отметить несколько.
         case add
         /// Замена валюты в строке — выбор одной.
         case replace(String)
+        /// Выбор одной валюты для настройки или графика; в список она не добавляется.
+        case choose(title: String, selected: String, onSelect: (String) -> Void)
     }
 
     enum Filter: String, CaseIterable, Identifiable {
@@ -91,6 +93,7 @@ struct CurrencyPickerView: View {
         switch mode {
         case .add: "Добавить валюту"
         case .replace(let code): "Заменить \(code)"
+        case .choose(let title, _, _): title
         }
     }
 
@@ -98,7 +101,8 @@ struct CurrencyPickerView: View {
         !query.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
-    /// Точное совпадение кода — первым, затем коды с таким началом, затем названия.
+    /// Точное совпадение кода — первым, затем коды с таким началом, затем названия
+    /// (популярные выше: по «вона» южнокорейская раньше северокорейской).
     private var searchResults: [Currency] {
         let needle = CurrencyCatalog.fold(query.trimmingCharacters(in: .whitespaces))
         let upper = needle.uppercased()
@@ -113,13 +117,14 @@ struct CurrencyPickerView: View {
     private func score(_ currency: Currency, _ code: String) -> Int {
         if currency.code == code { return 0 }
         if currency.code.hasPrefix(code) { return 1 }
-        return 2
+        return CurrencyCatalog.popular.contains(currency.code) ? 2 : 3
     }
 
     private func isChecked(_ currency: Currency) -> Bool {
         switch mode {
         case .add: store.codes.contains(currency.code)
         case .replace(let code): currency.code == code
+        case .choose(_, let selected, _): currency.code == selected
         }
     }
 
@@ -167,6 +172,9 @@ struct CurrencyPickerView: View {
             }
         case .replace(let code):
             store.replace(code, with: currency.code)
+            dismiss()
+        case .choose(_, _, let onSelect):
+            onSelect(currency.code)
             dismiss()
         }
     }

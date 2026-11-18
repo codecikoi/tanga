@@ -4,7 +4,8 @@ struct ConverterView: View {
     @Environment(ConverterStore.self) private var store
     @Environment(AppSettings.self) private var settings
     @State private var route: Route?
-    @State private var keypadVisible = true
+    /// Клавиатура появляется, только когда пользователь нажал на сумму.
+    @State private var keypadVisible = false
 
     enum Route: Identifiable, Hashable {
         case settings, add, edit
@@ -28,6 +29,7 @@ struct ConverterView: View {
         .onChange(of: settings.refreshInterval) {
             store.restartAutoRefresh()
         }
+        .task { await store.loadWeek() }
         #if DEBUG
         .task { applyDebugLaunchArguments() }
         #endif
@@ -35,9 +37,12 @@ struct ConverterView: View {
 
     #if DEBUG
     /// Сценарий для скриншотов из терминала, только в отладочной сборке:
-    /// `xcrun simctl launch booted com.zoir.sarrof -debugActive CNY -debugKeys 650+100 -debugRoute chart:USD`
+    /// `xcrun simctl launch booted com.codeflatwhite.tanga -debugActive CNY -debugKeys 650+100 -debugRoute chart:USD`
     private func applyDebugLaunchArguments() {
         let defaults = UserDefaults.standard
+        if defaults.string(forKey: "debugActive") != nil || defaults.string(forKey: "debugKeys") != nil {
+            keypadVisible = true
+        }
         if let code = defaults.string(forKey: "debugActive") { store.activate(code) }
         for char in defaults.string(forKey: "debugKeys") ?? "" {
             switch char {
@@ -64,41 +69,39 @@ struct ConverterView: View {
     // MARK: - Шапка
 
     private var header: some View {
-        HStack {
-            Button { route = .settings } label: {
-                Image(systemName: "line.3.horizontal")
-                    .font(.system(size: 21, weight: .medium))
-                    .frame(width: 44, height: 44)
-            }
-            .accessibilityLabel("Настройки")
+        HStack(spacing: 10) {
+            Image(.logo)
+                .resizable()
+                .frame(width: 32, height: 32)
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .accessibilityHidden(true)
+
+            Text("TANGA")
+                .font(.system(size: 20, weight: .semibold))
+                .tracking(2.5)
 
             Spacer()
 
-            HStack(spacing: 0) {
-                Text("SAR").fontWeight(.light)
-                Text("ROF").fontWeight(.heavy)
-            }
-            .font(.system(size: 21))
-            .tracking(4)
-
-            Spacer()
-
-            Menu {
-                Button("Добавить валюту", systemImage: "plus") { route = .add }
-                Button("Изменить список", systemImage: "list.bullet") { route = .edit }
-                Button("Обновить курсы", systemImage: "arrow.clockwise") {
-                    Task { await store.refresh() }
-                }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(.system(size: 23))
-                    .frame(width: 44, height: 44)
-            }
-            .accessibilityLabel("Ещё")
+            headerButton("plus", label: "Добавить валюту") { route = .add }
+            headerButton("gearshape", label: "Настройки") { route = .settings }
         }
         .foregroundStyle(Theme.textPrimary)
-        .padding(.horizontal, 10)
-        .frame(height: 54)
+        .padding(.leading, 18)
+        .padding(.trailing, 12)
+        .frame(height: 58)
+    }
+
+    private func headerButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 16, weight: .semibold))
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(Theme.chip))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 
     // MARK: - Строки валют
@@ -111,8 +114,9 @@ struct ConverterView: View {
                         row(code, proxy: proxy)
                             .id(code)
                     }
-                    Button { route = .add } label: {
-                        Label("Добавить валюту", systemImage: "plus.circle.fill")
+                    // Добавление теперь в шапке, а список правят отсюда — как в «Погоде».
+                    Button { route = .edit } label: {
+                        Label("Изменить список", systemImage: "list.bullet")
                             .font(.system(size: 16, weight: .medium))
                             .foregroundStyle(Theme.accent)
                             .frame(maxWidth: .infinity)
@@ -122,6 +126,10 @@ struct ConverterView: View {
             }
             .scrollIndicators(.hidden)
             .refreshable { await store.refresh() }
+            .onScrollPhaseChange { _, phase in
+                // Как у системной клавиатуры: начал листать список — клавиатура уходит.
+                if phase == .interacting { setKeypad(false) }
+            }
             .onChange(of: store.activeCode) { _, code in
                 withAnimation { proxy.scrollTo(code) }
             }
@@ -129,26 +137,28 @@ struct ConverterView: View {
     }
 
     private func row(_ code: String, proxy: ScrollViewProxy) -> some View {
-        let isActive = code == store.activeCode
+        let isEditing = keypadVisible && code == store.activeCode
         let input = store.input
-        let result: String? = isActive && input.hasOperator
+        let result: String? = isEditing && input.hasOperator
             ? input.value.map { "= " + AmountFormatter.string($0, precision: settings.precision) }
             : nil
 
         return CurrencyRowView(
             code: code,
             currency: store.currency(code),
-            isActive: isActive,
-            amount: isActive ? input.display() : store.formattedAmount(for: code),
+            isActive: isEditing,
+            isBase: code == settings.mainCurrency,
+            amount: isEditing ? input.display() : store.formattedAmount(for: code),
             isSelected: input.replaceOnType,
             result: result,
+            trend: store.trend(for: code),
             onTap: { activate(code, proxy: proxy) },
             onPick: { route = .replace(code) },
             onChart: { route = .chart(code) }
         )
         .contextMenu {
             Button("Скопировать сумму", systemImage: "doc.on.doc") {
-                UIPasteboard.general.string = isActive ? input.display() : store.formattedAmount(for: code)
+                UIPasteboard.general.string = isEditing ? input.display() : store.formattedAmount(for: code)
             }
             Button("График курса", systemImage: "chart.xyaxis.line") { route = .chart(code) }
             Button("Заменить валюту", systemImage: "arrow.left.arrow.right") { route = .replace(code) }
@@ -176,28 +186,30 @@ struct ConverterView: View {
 
     private var bottomPanel: some View {
         VStack(spacing: 0) {
-            Capsule()
-                .fill(Theme.textSecondary.opacity(0.45))
-                .frame(width: 40, height: 5)
-                .padding(.top, 8)
-                .padding(.bottom, 10)
-                .frame(maxWidth: .infinity)
-                .contentShape(Rectangle())
-                .onTapGesture { setKeypad(!keypadVisible) }
-                .gesture(
-                    DragGesture(minimumDistance: 8).onEnded { value in
-                        if value.translation.height > 20 { setKeypad(false) }
-                        if value.translation.height < -20 { setKeypad(true) }
-                    }
-                )
-                .accessibilityLabel(keypadVisible ? "Скрыть клавиатуру" : "Показать клавиатуру")
-
             if keypadVisible {
-                KeypadView(isRefreshing: store.isRefreshing) { key in
-                    Haptics.tap(settings.haptics)
-                    store.press(key)
+                VStack(spacing: 0) {
+                    Capsule()
+                        .fill(Theme.textSecondary.opacity(0.45))
+                        .frame(width: 40, height: 5)
+                        .padding(.top, 8)
+                        .padding(.bottom, 10)
+                        .frame(maxWidth: .infinity)
+                        .contentShape(Rectangle())
+                        .onTapGesture { setKeypad(false) }
+                        .gesture(
+                            DragGesture(minimumDistance: 8).onEnded { value in
+                                if value.translation.height > 20 { setKeypad(false) }
+                            }
+                        )
+                        .accessibilityLabel("Скрыть клавиатуру")
+                        .accessibilityAddTraits(.isButton)
+
+                    KeypadView(isRefreshing: store.isRefreshing) { key in
+                        Haptics.tap(settings.haptics)
+                        store.press(key)
+                    }
+                    .padding(.horizontal, 16)
                 }
-                .padding(.horizontal, 16)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
@@ -218,6 +230,7 @@ struct ConverterView: View {
 
     private func setKeypad(_ visible: Bool) {
         guard visible != keypadVisible else { return }
+        if !visible { store.finishEditing() }
         withAnimation(.snappy(duration: 0.3)) { keypadVisible = visible }
     }
 
@@ -258,11 +271,7 @@ private struct StatusLine: View {
                         .font(.footnote)
                         .foregroundStyle(Theme.textSecondary)
                         .lineLimit(1)
-                    Spacer(minLength: 8)
-                    Text(sourcesText)
-                        .font(.caption2)
-                        .foregroundStyle(Theme.textSecondary.opacity(0.75))
-                        .lineLimit(1)
+                    Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 22)
                 .padding(.vertical, 12)
@@ -279,10 +288,6 @@ private struct StatusLine: View {
         if failed { return "Нет связи · курсы \(time)" }
         if data.sources == [.bundled] { return "Встроенные курсы \(time)" }
         return "Обновлено \(time)"
-    }
-
-    private var sourcesText: String {
-        data.sources.filter { $0 != .bundled }.map(\.title).joined(separator: " · ")
     }
 
     private func dotColor(now: Date) -> Color {

@@ -3,7 +3,7 @@ import Foundation
 /// Загружает курсы из Coinbase и Currency API, сводит их и хранит последний снимок на диске.
 final class RatesRepository {
     private let http = HTTPClient()
-    private let store = FileStore(.applicationSupportDirectory, folder: "Sarrof")
+    private let store = FileStore(.applicationSupportDirectory, folder: "Tanga")
     private let fileName = "rates.json"
     private static let metadataMaxAge: TimeInterval = 3 * 24 * 3600
 

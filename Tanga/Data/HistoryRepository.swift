@@ -51,14 +51,22 @@ final class HistoryRepository {
     static let earliestDay = "2024-03-02"
 
     private let http = HTTPClient(timeout: 12)
-    private let disk = FileStore(.cachesDirectory, folder: "Sarrof/history")
+    private let disk = FileStore(.cachesDirectory, folder: "Tanga/history")
     private var memory: [String: [String: Double]] = [:]
     private var inflight: [String: Task<[String: Double]?, Never>] = [:]
     private var failures: [String: Date] = [:]
 
     func series(base: String, quote: String, range: ChartRange, now: Date = .now) async -> [RatePoint] {
+        await days(range: range, now: now).compactMap { day in
+            guard let baseRate = day.rates[base], let quoteRate = day.rates[quote] else { return nil }
+            return RatePoint(date: day.date, value: quoteRate / baseRate)
+        }
+    }
+
+    /// Курсы всех валют к USD по дням периода, от старых к новым; дни, которые не загрузились, пропущены.
+    func days(range: ChartRange, now: Date = .now) async -> [(date: Date, rates: [String: Double])] {
         let keys = Self.dayKeys(range: range, now: now)
-        let days = await withTaskGroup(of: (String, [String: Double]?).self) { group in
+        let loaded = await withTaskGroup(of: (String, [String: Double]?).self) { group in
             for key in keys {
                 group.addTask { (key, await self.day(key)) }
             }
@@ -69,11 +77,8 @@ final class HistoryRepository {
             return result
         }
         return keys.compactMap { key in
-            guard let rates = days[key],
-                  let baseRate = rates[base], let quoteRate = rates[quote],
-                  let date = DayKey.date(from: key)
-            else { return nil }
-            return RatePoint(date: date, value: quoteRate / baseRate)
+            guard let rates = loaded[key], let date = DayKey.date(from: key) else { return nil }
+            return (date, rates)
         }
     }
 
@@ -90,12 +95,6 @@ final class HistoryRepository {
             if key >= earliestDay, seen.insert(key).inserted { keys.append(key) }
         }
         return keys
-    }
-
-    func clearCache() {
-        memory.removeAll()
-        failures.removeAll()
-        disk.removeAll()
     }
 
     private func day(_ key: String) async -> [String: Double]? {

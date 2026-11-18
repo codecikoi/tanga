@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import Sarrof
+@testable import Tanga
 
 struct RatesMergerTests {
     @Test func staleFiatFromCoinbaseIsRejected() {

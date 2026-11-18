@@ -54,14 +54,6 @@ enum AppAppearance: String, CaseIterable, Identifiable {
         case .system: "Как в системе"
         }
     }
-
-    var colorScheme: ColorScheme? {
-        switch self {
-        case .dark: .dark
-        case .light: .light
-        case .system: nil
-        }
-    }
 }
 
 @Observable
@@ -78,6 +70,10 @@ final class AppSettings {
     var haptics: Bool {
         didSet { defaults.set(haptics, forKey: Keys.haptics) }
     }
+    /// Основная валюта: в ней мини-графики и проценты в строках, с ней открывается график.
+    var mainCurrency: String {
+        didSet { defaults.set(mainCurrency, forKey: Keys.mainCurrency) }
+    }
 
     @ObservationIgnored private let defaults: UserDefaults
 
@@ -87,6 +83,7 @@ final class AppSettings {
         refreshInterval = (defaults.object(forKey: Keys.refresh) as? Int).flatMap(RefreshInterval.init(rawValue:)) ?? .minute
         appearance = AppAppearance(rawValue: defaults.string(forKey: Keys.appearance) ?? "") ?? .dark
         haptics = defaults.object(forKey: Keys.haptics) as? Bool ?? true
+        mainCurrency = defaults.string(forKey: Keys.mainCurrency) ?? "USD"
     }
 
     private enum Keys {
@@ -94,5 +91,6 @@ final class AppSettings {
         static let refresh = "settings.refreshInterval"
         static let appearance = "settings.appearance"
         static let haptics = "settings.haptics"
+        static let mainCurrency = "settings.mainCurrency"
     }
 }
